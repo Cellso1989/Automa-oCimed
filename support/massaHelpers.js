@@ -19,13 +19,18 @@ async function garantirMassaEmAnaliseFiscal(sfSession, tipoRegistro) {
 
   console.log(`Nenhum Lead "${tipoRegistro}" em Análise Fiscal — gerando massa fresca antes de continuar...`);
 
+  // headless:false só funciona com um X Server disponível (máquina local).
+  // No runner do GitHub Actions não há display — CI define process.env.CI,
+  // então usamos isso pra decidir, headless em CI e visível localmente.
+  const headless = !!process.env.CI;
+
   if (tipoRegistro === "CG Cloud") {
     const { criarEAprovarCadastral } = require("../scripts/criar-massa-cg-cloud");
-    const { browser } = await criarEAprovarCadastral({ headless: false });
+    const { browser } = await criarEAprovarCadastral({ headless });
     await browser.close();
   } else {
     const { criarEAprovarCadastral } = require("../scripts/criar-massa-lead");
-    const { browser } = await criarEAprovarCadastral(tipoRegistro, { headless: false });
+    const { browser } = await criarEAprovarCadastral(tipoRegistro, { headless });
     await browser.close();
   }
 
