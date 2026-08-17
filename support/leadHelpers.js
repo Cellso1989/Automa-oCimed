@@ -71,17 +71,30 @@ async function selecionarViaPesquisaAvancada(page, nomeCampo, termoBusca) {
 // Picklists simples (Setor Industrial, UF etc.) são combobox customizados do
 // Lightning, não <select> nativos — precisa abrir e clicar na opção. Em
 // formulários longos (ex.: Milimetric, com muitas seções) o dropdown demora
-// mais pra renderizar as opções do que os 300ms originais — por isso tenta
-// de novo com espera maior antes de desistir, em vez de falhar na primeira.
-async function selecionarPicklist(page, nomeCampo, valor) {
+// mais pra renderizar as opções do que os 300ms originais.
+//
+// A tela às vezes re-renderiza no meio da interação (autosave/validação de
+// outro campo) e fecha o dropdown já aberto — se isso acontecer bem no
+// momento do clique, a opção nunca mais reaparece e um clique único fica
+// esperando por ela indefinidamente (travado até estourar o timeout do
+// teste inteiro). Por isso reabre o combobox a cada tentativa (mesmo padrão
+// já validado em selectLookupOption/lookup.js) em vez de confiar num único
+// clique.
+async function selecionarPicklist(page, nomeCampo, valor, { tentativas = 3 } = {}) {
   const combo = page.getByRole("combobox", { name: nomeCampo, exact: true });
-  await combo.scrollIntoViewIfNeeded();
-  await combo.click();
   const opcao = page.getByRole("option", { name: valor, exact: true });
-  for (let tentativa = 0; tentativa < 3 && !(await opcao.count()); tentativa++) {
-    await page.waitForTimeout(1000);
+  await combo.scrollIntoViewIfNeeded();
+
+  for (let tentativa = 1; tentativa <= tentativas; tentativa++) {
+    await combo.click();
+    try {
+      await opcao.waitFor({ state: "visible", timeout: 5000 });
+      await opcao.click();
+      return;
+    } catch (erro) {
+      if (tentativa === tentativas) throw erro;
+    }
   }
-  await opcao.click();
 }
 
 // Abre um Lead com Status "Análise Fiscal" do Tipo de registro pedido. A
