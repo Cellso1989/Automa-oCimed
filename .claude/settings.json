@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell(node --version)",
+      "PowerShell(npm --version)",
+      "PowerShell(npm install --save-dev cypress)",
+      "Read(//c/Users/celso.sabino/AppData/Local/Cypress/Cache/15.18.1/Cypress/**)",
+      "Read(//c/Users/celso.sabino/Desktop/AUTOMAÇÃO CIMED/Automação - Sebrae/adobe-sebrae-tab/cypress/config/**)",
+      "Read(//c/Users/celso.sabino/Desktop/AUTOMAÇÃO CIMED/Sebrae - Regressivo/cypress/e2e/gui/**)",
+      "Bash(curl -sL -A \"Mozilla/5.0\" -o /dev/null -w \"teste-consultoria-online on ES: %{http_code}\\\\n\" \"https://es.mcstaging.loja.sebrae.com.br/teste-consultoria-online\")",
+      "Bash(curl -sL -A \"Mozilla/5.0\" -o /dev/null -w \"pizza-delivery-1-1146 on ES: %{http_code}\\\\n\" \"https://es.mcstaging.loja.sebrae.com.br/pizza-delivery-1-1146\")",
+      "Bash(curl -sL -A \"Mozilla/5.0\" -o /dev/null -w \"saga-do-heroi-1-1148 on ES: %{http_code}\\\\n\" \"https://es.mcstaging.loja.sebrae.com.br/saga-do-heroi-1-1148\")",
+      "Bash(curl -sL -A \"Mozilla/5.0\" -o /dev/null -w \"fabrica-de-chocolate-1-1149 on ES: %{http_code}\\\\n\" \"https://es.mcstaging.loja.sebrae.com.br/fabrica-de-chocolate-1-1149\")"
+    ]
+  }
+}

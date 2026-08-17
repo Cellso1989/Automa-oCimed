@@ -1,0 +1,9 @@
+node_modules/
+test-results/
+screenshots/
+tests/*/screenshots/
+playwright-report/
+env.json
+tests/.jira-processed.json
+tests/_drafts/
+.claude/scheduled_tasks.lock

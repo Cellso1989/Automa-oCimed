@@ -1,0 +1,12 @@
+{
+  "name": "automacao-cimed-salesforce",
+  "version": "1.0.0",
+  "description": "Testes automatizados com Playwright para o Salesforce (Lightning) da Cimed - ambiente UAT",
+  "scripts": {
+    "test": "playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.48.0",
+    "docx": "^9.7.1"
+  }
+}
