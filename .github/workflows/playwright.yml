@@ -38,7 +38,7 @@ jobs:
           JIRA_EMAIL: ${{ secrets.JIRA_EMAIL }}
           JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
         run: |
-          cat > .env.json <<EOF
+          cat > env.json <<EOF
           {
             "sfBaseUrl": "$SF_BASE_URL",
             "sfUsername": "$SF_USERNAME",
