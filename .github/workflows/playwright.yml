@@ -27,6 +27,32 @@ jobs:
       - name: Instalar Playwright
         run: npx playwright install --with-deps
 
+      - name: Criar arquivo de ambiente
+        env:
+          SF_BASE_URL: ${{ secrets.SF_BASE_URL }}
+          SF_USERNAME: ${{ secrets.SF_USERNAME }}
+          SF_PASSWORD: ${{ secrets.SF_PASSWORD }}
+          SF_SECURITY_TOKEN: ${{ secrets.SF_SECURITY_TOKEN }}
+          SF_TOTP_SECRET: ${{ secrets.SF_TOTP_SECRET }}
+          JIRA_SITE: ${{ secrets.JIRA_SITE }}
+          JIRA_PROJECT_KEY: ${{ secrets.JIRA_PROJECT_KEY }}
+          JIRA_EMAIL: ${{ secrets.JIRA_EMAIL }}
+          JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
+        run: |
+          cat > .env.json <<EOF
+          {
+            "sfBaseUrl": "$SF_BASE_URL",
+            "sfUsername": "$SF_USERNAME",
+            "sfPassword": "$SF_PASSWORD",
+            "sfSecurityToken": "$SF_SECURITY_TOKEN",
+            "sfTotpSecret": "$SF_TOTP_SECRET",
+            "JIRA_SITE": "$JIRA_SITE",
+            "JIRA_PROJECT_KEY": "$JIRA_PROJECT_KEY",
+            "JIRA_EMAIL": "$JIRA_EMAIL",
+            "JIRA_API_TOKEN": "$JIRA_API_TOKEN"
+          }
+          EOF
+
       - name: Executar testes
         run: npx playwright test
 
