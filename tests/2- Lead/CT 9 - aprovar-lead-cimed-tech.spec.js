@@ -4,16 +4,23 @@ const {
   completarFiscalLogisticaEConverter,
   aprovarAnaliseFiscalComEdicao,
 } = require("../../support/leadHelpers");
+const { garantirMassaEmAnaliseFiscal } = require("../../support/massaHelpers");
 const { soqlQuery } = require("../../support/soqlQuery");
 
-// Papel de analista: não cria o Lead. Pré-condição: existir um Lead do tipo
-// Cimed Tech em "Análise Fiscal" (massa gerada pelo CT 8 — cadastral
-// completo + aprovação). Completa os campos restantes e aprova via "Editar
-// Lead Aprovação" + "Salvar e Aprovar" — mecanismo confirmado como o
-// verdadeiro gatilho da conversão nativa do Salesforce (IsConverted = true,
-// Account/Contact criados), testado com Lead recém-criado (não reaproveitado).
+// Pré-condição: existir um Lead Cimed Tech em "Análise Fiscal". Normalmente
+// já existe (o CT 8, que roda antes na mesma suíte, sempre deixa um pronto),
+// mas o teste não depende disso — `garantirMassaEmAnaliseFiscal` confere
+// antes e gera na hora se precisar, pra este spec funcionar sozinho mesmo
+// rodado isolado (testes devem ser independentes — CLAUDE.md item 18).
+// Completa os campos restantes e aprova via "Editar Lead Aprovação" +
+// "Salvar e Aprovar" — mecanismo confirmado como o verdadeiro gatilho da
+// conversão nativa do Salesforce (IsConverted = true, Account/Contact
+// criados), testado com Lead recém-criado (não reaproveitado).
 test("aprova um Lead Cimed Tech e converte de verdade", async ({ page, sfSession }) => {
-  test.setTimeout(90000);
+  // Timeout ampliado pra cobrir o pior caso: gerar massa do zero (~40s) +
+  // fluxo normal de aprovação.
+  test.setTimeout(180000);
+  await garantirMassaEmAnaliseFiscal(sfSession, "Cimed Tech");
   await abrirLeadEmAnaliseFiscalPorTipo(page, sfSession, "Cimed Tech");
   const leadId = page.url().match(/00Q\w+/)[0];
 

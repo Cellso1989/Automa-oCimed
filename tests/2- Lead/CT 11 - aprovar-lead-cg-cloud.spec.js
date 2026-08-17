@@ -4,11 +4,15 @@ const {
   completarFiscalLogisticaEConverter,
   aprovarAnaliseFiscalComEdicao,
 } = require("../../support/leadHelpers");
+const { garantirMassaEmAnaliseFiscal } = require("../../support/massaHelpers");
 const { soqlQuery } = require("../../support/soqlQuery");
 
-// Papel de analista: não cria o Lead. Pré-condição: existir um Lead do tipo
-// CG Cloud em "Análise Fiscal" (massa já existente no sistema, ou gerada por
-// um fluxo de criação + aprovação da Análise Cadastral como Mayssara).
+// Pré-condição: existir um Lead CG Cloud em "Análise Fiscal". Nenhum outro
+// CT desta suíte abastece isso (o CT 7 cria o Lead mas para de propósito em
+// "Pronto para Aprovação", sem enviar) — por isso
+// `garantirMassaEmAnaliseFiscal` confere e gera na hora se precisar, deixando
+// o spec independente (CLAUDE.md item 18) em vez de depender de rodar
+// scripts/gerar-massa-para-suite.js à parte antes.
 //
 // Diferente de Cimed Tech/Milimetric/Hospitalar: pra CG Cloud, a aprovação
 // real da etapa "Análise Fiscal" acontece via "Editar Lead Aprovação" +
@@ -18,7 +22,12 @@ const { soqlQuery } = require("../../support/soqlQuery");
 // nenhum clique adicional no path pra "Convertido". Confirmado testando com
 // um Lead real (aprovação manual) e replicado via automação.
 test("aprova um Lead CG Cloud e converte de verdade (Account real)", async ({ page, sfSession }) => {
-  test.setTimeout(90000);
+  // Timeout ampliado pra cobrir o pior caso: gerar massa do zero (CG Cloud é
+  // o tipo mais demorado de criar, ~1.5-2min, e o mais sensível à lentidão
+  // da org — já visto passar de 5min em condições ruins) + fluxo normal de
+  // aprovação.
+  test.setTimeout(480000);
+  await garantirMassaEmAnaliseFiscal(sfSession, "CG Cloud");
   await abrirLeadEmAnaliseFiscalPorTipo(page, sfSession, "CG Cloud");
   const leadId = page.url().match(/00Q\w+/)[0];
 
