@@ -55,10 +55,14 @@ jobs:
       - name: Executar testes
         run: npx playwright test
 
-      - name: Salvar relatório
+      - name: Salvar screenshots de falha
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: playwright-report
-          path: playwright-report/
+          name: playwright-screenshots
+          # O projeto usa reporter "list" (sem HTML report) e cada "project"
+          # salva screenshots na própria pasta do tema (playwright.config.js)
+          # — não em playwright-report/, que nunca chega a existir.
+          path: tests/*/screenshots/
           retention-days: 7
+          if-no-files-found: ignore

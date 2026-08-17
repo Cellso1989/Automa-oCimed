@@ -14,6 +14,13 @@ test("cria um Contato vinculado a uma Conta", async ({ page }) => {
   await page.getByRole("button", { name: "Salvar", exact: true }).click();
   await expect(page).toHaveURL(/\/lightning\/r\/(Account\/)?001\w+\/view/, { timeout: 30000 });
 
+  // O lookup "Nome da conta" do Contato busca no índice de pesquisa do
+  // Salesforce, que não é atualizado em tempo real — uma Conta recém-criada
+  // pode levar alguns segundos pra ficar pesquisável. Sem essa espera, o
+  // combobox mostra "Selecione uma opção..." porque a opção nunca aparece
+  // (reproduzido de forma consistente local e no CI, não é flakiness).
+  await page.waitForTimeout(10000);
+
   await page.goto(page.url().replace(/\/lightning\/.*/, "/lightning/o/Contact/new"));
 
   await page.getByRole("textbox", { name: "Sobrenome" }).fill(sobrenome);
