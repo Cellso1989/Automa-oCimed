@@ -111,39 +111,51 @@ Lead genuinamente fresco e olhando a mensagem de erro real na tela (não só o
 resultado). **Sempre teste com massa nova e preste atenção em qualquer toast
 de erro antes de concluir que um tipo "não funciona".**
 
-### Hospitalar — bloqueio real é de LAYOUT, não de processo de aprovação (corrigido em 2026-08-16)
+### Hospitalar — RESOLVIDO DE VEZ (2026-08-20): bloqueio era de PROFILE na criação + campo "Segmento" nunca preenchido
 
-**Conclusão anterior estava errada.** Hospitalar TEM processo de aprovação
-ativo — é o mesmo processo "Lead CGCloud" usado por CG Cloud (não é
-exclusivo desse tipo apesar do nome). Confirmado via SOQL: existem **82
-Leads Hospitalar convertidos de verdade** (`IsConverted = true`) em
-produção, todos aprovados automaticamente ("Aprovado Automaticamente",
-~1 minuto entre as duas etapas) via esse processo.
+**As conclusões anteriores (processo sem aprovação ativo → bloqueio de layout
+no Setup → botão nativo "Converter") foram todas incompletas ou erradas.** O
+fluxo real funciona exatamente como Cimed Tech/Milimetric/CG Cloud, em duas
+partes:
 
-O bloqueio real, achado testando manualmente com um Lead Hospitalar
-preenchido com o MESMO conjunto de campos que funciona pra CG Cloud (Fiscal/
-Logística/contato/checkboxes de documento): a validação de "Marcar Status"
-retorna o erro explícito **"Preencha os campos obrigatórios: ... Forma de
-Contato Padrão ... e anexos"** — e o campo **"Forma de Contato Padrão" não
-existe no layout de página do Hospitalar** (só no de CG Cloud). Não tem como
-preencher esse campo pela UI pra esse Tipo de Registro, então a validação
-nunca passa. "Anexos" provavelmente exige arquivo real anexado, não só os
-checkboxes booleanos (`AFE_anexado__c` etc.) que preenchemos via API.
+**1. Criação precisa ser feita como NICOLE GOMES AMARAL** (Profile
+"Faturamento") — confirmado via SOQL que os 82 Leads Hospitalar reais
+convertidos foram todos criados por ela. O profile dela tem uma atribuição de
+layout diferente que **inclui "Forma de Contato Padrão"** (o campo que a
+investigação anterior achava ausente do layout — só estava ausente do
+profile do usuário de automação). `scripts/criar-massa-hospitalar-nicole.js`
+e `criarLeadHospitalarComoNicoleAteAnaliseCadastral` (`support/leadHelpers.js`)
+fazem isso: Nicole cria e preenche via "Login As".
 
-Os 82 Leads convertidos reais claramente chegam por uma **integração
-externa** que nunca passa pelo botão "Enviar para aprovação"/"Marcar Status"
-da UI — provavelmente inserida via API já num estágio mais avançado, ou
-usando dados que a integração preenche mas o formulário de criação manual
-não expõe.
+**2. O campo "Segmento" precisa ser "Distribuidor Hospitalar" (ou "Órgão
+Público")** — a automação sempre deixava esse campo no default errado
+("Farmácia/Distribuidor farmacêutico"). Com o valor certo, o clique em
+"Marcar como Status atual" (Rascunho → Pronto para Aprovação) dispara sozinho
+uma **aprovação REAL** — cria um `Histórico de aprovação` de verdade
+(`ProcessInstance`), exatamente como os outros 3 tipos. A partir daí, tudo é
+igual: Mayssara aprova via "Aprovar" real (`aprovarEtapaPendente`,
+reaproveitado em `avancarAnaliseFiscalHospitalarComoMayssara`), e "Editar
+Lead Aprovação" + "Salvar e Aprovar" (`aprovarAnaliseFiscalComEdicao`)
+converte de verdade — `IsConverted = true`, e a integração SAP dispara
+sozinha com sucesso. O botão nativo "Converter"/`converterLeadNativo` (que a
+investigação anterior achava ser o mecanismo real) não é necessário — foi
+descoberto e testado antes do Segmento ser corrigido, quando de fato não
+existia aprovação real por trás.
 
-**Correção real necessária:** ajuste de Setup do Salesforce (adicionar
-"Forma de Contato Padrão" ao layout do Hospitalar, ou remover essa exigência
-da validação pra esse tipo) — fora do alcance da automação. `CT 6`/`CT 12`
-continuam sem massa própria de propósito (ver `scripts/gerar-massa-para-suite.js`,
-que gera massa só pra Milimetric).
+**Achado à parte:** os checkboxes de anexo (`AFE_anexado__c` etc.) não podem
+ser preenchidos pela Nicole nem via API — o profile "Faturamento" dela não
+tem permissão de escrita nesses campos (testado com o session Id dela
+extraído do cookie de impersonação). Mantidos com o usuário de automação.
 
-Um detalhe interessante: o Lead Hospitalar tem um botão nativo **"Converter"**
-na barra de ações (ausente em Cimed Tech/Milimetric) — ainda não testado.
+**CT 6** (`tests/2- Lead/CT 6 - criar-lead-hospitalar.spec.js`) cria e avança
+até "Análise Cadastral" (com aprovação real pendente). **CT 12**
+(`tests/2- Lead/CT 12 - aprovar-lead-hospitalar.spec.js`) segue a mesma
+lógica dos CT 9/10/11 (`garantirMassaEmAnaliseFiscal` gera massa se
+precisar) e converte de verdade via `aprovarAnaliseFiscalComEdicao` —
+confirmado `IsConverted = true` e integração SAP com `Codigo_SAP__c` real
+via SOQL. Ver `[[project_lead_hospitalar_nicole]]` na memória do projeto pro
+histórico completo da investigação (incluindo os becos sem saída percorridos
+antes de achar o Segmento).
 
 ## Integração com o SAP: "Status de Integração" da Conta
 

@@ -6,35 +6,39 @@
 // da Conta) via SOQL.
 //
 // Tipos suportados (confirmados end-to-end): "Cimed Tech", "Milimetric",
-// "CG Cloud". "Hospitalar" NÃO é suportado aqui — não existe processo de
-// aprovação ativo pra esse tipo no Setup (ver README), então o fluxo trava
-// bem antes da conversão.
+// "CG Cloud", "Hospitalar". Hospitalar precisa ser criado como Nicole Gomes
+// Amaral com "Segmento" = "Distribuidor Hospitalar" pra aprovação real
+// disparar — ver [[project_lead_hospitalar_nicole]] na memória do projeto e
+// a seção "Hospitalar" do README.md.
 //
 // Uso:
 //   node scripts/criar-e-converter-lead.js "Cimed Tech"
 //   node scripts/criar-e-converter-lead.js "Milimetric"
 //   node scripts/criar-e-converter-lead.js "CG Cloud"
+//   node scripts/criar-e-converter-lead.js "Hospitalar"
 const { completarFiscalLogisticaEConverter, aprovarAnaliseFiscalComEdicao } = require("../support/leadHelpers");
 const { soqlQuery } = require("../support/soqlQuery");
 const { criarEAprovarCadastral: criarCgCloud } = require("./criar-massa-cg-cloud");
+const { criarEAprovarCadastral: criarHospitalar } = require("./criar-massa-hospitalar-nicole");
 const { criarEAprovarCadastral: criarOutroTipo } = require("./criar-massa-lead");
 
 async function main() {
   const tipoRegistro = process.argv[2];
   if (!tipoRegistro) {
-    console.error(`Uso: node scripts/criar-e-converter-lead.js "<Cimed Tech|Milimetric|CG Cloud>"`);
-    process.exit(1);
-  }
-  if (tipoRegistro === "Hospitalar") {
-    console.error(
-      'Hospitalar não é suportado neste fluxo: não existe processo de aprovação ativo pra esse tipo no Setup (o "Enviar para aprovação" não faz nada, não importa o que seja preenchido). Ver README.md.'
-    );
+    console.error(`Uso: node scripts/criar-e-converter-lead.js "<Cimed Tech|Milimetric|CG Cloud|Hospitalar>"`);
     process.exit(1);
   }
 
   console.log(`Criando Lead ${tipoRegistro} e aprovando Análise Cadastral como Mayssara...`);
-  const { sfSession, browser, page, leadId } =
-    tipoRegistro === "CG Cloud" ? await criarCgCloud() : await criarOutroTipo(tipoRegistro);
+  let resultadoCriacao;
+  if (tipoRegistro === "CG Cloud") {
+    resultadoCriacao = await criarCgCloud();
+  } else if (tipoRegistro === "Hospitalar") {
+    resultadoCriacao = await criarHospitalar();
+  } else {
+    resultadoCriacao = await criarOutroTipo(tipoRegistro);
+  }
+  const { sfSession, browser, page, leadId } = resultadoCriacao;
 
   console.log(`LEAD_ID::${leadId}`);
   console.log("Preenchendo Fiscal/Financeira/Logística...");

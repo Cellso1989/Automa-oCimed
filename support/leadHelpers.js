@@ -41,6 +41,27 @@ async function preencherCadeiraOrgUnit(sfSession, leadId) {
   });
 }
 
+// Marca os checkboxes de documento anexado via API — sem mecanismo de UI
+// identificado pra eles (mesmo padrão já usado em
+// scripts/criar-massa-cg-cloud.js). Não confundir com anexar um arquivo de
+// verdade: a validação de "Marcar Status" do Hospitalar também exige
+// "anexos" reais, que esses booleans sozinhos não substituem.
+//
+// `sessionId` opcional: pra Hospitalar, o usuário pediu que esses campos
+// fiquem atribuídos à Nicole (quem realmente cria o Lead), não ao usuário de
+// automação — passe o sessionId dela (ver
+// `obterSessionIdDoUsuarioImpersonado` em userHelpers.js) pra isso. Sem
+// passar, usa `sfSession.sessionId` (comportamento antigo, usado por CG
+// Cloud).
+async function preencherAnexosDocumento(sfSession, leadId, sessionId = sfSession.sessionId) {
+  await apiPatch(sfSession.instanceHost, sessionId, `/services/data/v60.0/sobjects/Lead/${leadId}`, {
+    AFE_anexado__c: true,
+    Alvara_Sanitario_anexado__c: true,
+    CRF_anexado__c: true,
+    Contrato_Social_anexado__c: true,
+  });
+}
+
 // Busca "Business Unit"/"Warehouse" via pesquisa avançada (a busca rápida do
 // lookup não retorna opção direta pra esses dois campos nesta org — só
 // "Exibir mais resultados") e seleciona o primeiro resultado por radio button.
@@ -97,6 +118,229 @@ async function selecionarPicklist(page, nomeCampo, valor, { tentativas = 3 } = {
   }
 }
 
+// Bloco de campos da Análise Cadastral repetido em todo spec que cria/edita
+// um Lead até essa etapa (CT 4, CT 6, CT 8) — extraído aqui pra evitar que
+// uma mudança de layout no Salesforce precise ser replicada em cada spec
+// manualmente. O Lead precisa já estar em modo de edição (botão "Editar" já
+// clicado) antes de chamar isso.
+//
+// `parceiro` varia por Tipo de Registro (ex.: "H07_IS306" pra Cimed Tech,
+// "H01_SD100" pra Hospitalar — códigos reais de Parceiro de Negócios
+// Vendedor, não intercambiáveis).
+//
+// `incluirBusinessUnitWarehouse` é false pro fluxo CNPJ-primeiro (Hospitalar/
+// CG Cloud): Business Unit já foi definido no wizard de criação e Warehouse
+// já vem pré-selecionado por padrão pro Tipo de Registro — reabrir a busca
+// avançada num campo já preenchido rompe o fluxo (ver nota em
+// completarFiscalLogisticaEConverter sobre o mesmo problema).
+async function completarAnaliseCadastralComum(page, { parceiro, incluirBusinessUnitWarehouse = true }) {
+  await page.getByRole("textbox", { name: "Endereço de Faturamento" }).fill("Rua Teste, 123");
+  await page.getByRole("textbox", { name: "CEP", exact: true }).fill("01310-100");
+  await page.getByRole("textbox", { name: "Bairro", exact: true }).fill("Bairro Teste");
+  await page.getByRole("textbox", { name: "Cidade", exact: true }).fill("São Paulo");
+  await page.getByRole("textbox", { name: "Parceiro de Negócios Vendedor" }).fill(parceiro);
+  await page.getByRole("textbox", { name: "Número AE" }).fill("AE001");
+  await page.getByRole("textbox", { name: "Nome Farmacêutico Responsável" }).fill("Farmacêutico Teste");
+  await page.getByRole("textbox", { name: "Número CRF Farmacêutico Responsável" }).fill("CRF001");
+  await page.getByRole("textbox", { name: "Data de vencimento CRF" }).fill("31/12/2030");
+  await page.getByRole("textbox", { name: "Documentos Faltantes" }).fill("Nenhum");
+  await page.getByRole("textbox", { name: "Número Alvará Sivisa" }).fill("SIVISA001");
+  await page.getByRole("textbox", { name: "Data de Vencimento Alvará Sivisa" }).fill("31/12/2030");
+
+  await selecionarPicklist(page, "Situação AFE/AE", "Regular");
+  await selecionarPicklist(page, "Classe do cliente", "01- Grandes Redes");
+  await selecionarPicklist(page, "Grupo do cliente", "01-Grandes contas");
+  await selecionarPicklist(page, "Pode comprar medicamento controlado", "Não");
+  await selecionarPicklist(page, "Conta do Cliente", "ZMED");
+
+  if (incluirBusinessUnitWarehouse) {
+    // Business Unit "01 - Contas Nacionais" não tem preço cadastrado (achado
+    // manual confirmado) — usar "03 - Varejo Independente" em vez disso.
+    await selecionarViaPesquisaAvancada(page, "Business Unit", "03");
+    await selecionarViaPesquisaAvancada(page, "Warehouse", "SP");
+  }
+}
+
+// Preenche o formulário de edição do Lead Hospitalar quando logado como
+// NICOLE GOMES AMARAL (Profile "Faturamento") — ver nota no CT 6. O layout
+// dela é DIFERENTE do layout visto pelo usuário de automação: em vez de
+// Cadastral/Fiscal/Logística em telas/etapas separadas, é um único formulário
+// grande com todos os campos juntos (inclusive "Forma de Contato Padrão",
+// ausente no layout do usuário de automação — essa é a causa raiz do
+// bloqueio documentado no README). O Lead precisa já estar em modo de edição
+// (botão "Editar" já clicado) antes de chamar isso.
+//
+// Valores baseados no único Lead Hospitalar convertido de verdade analisado
+// via SOQL até agora (segmento "Órgão Público") — `grupoDoCliente`,
+// `tipoEntidadeGovernamental` etc. podem não generalizar para Hospitalar
+// fora desse segmento; ajustar se um Lead não-governamental convertido for
+// analisado depois.
+async function completarAnaliseCadastralHospitalarComoNicole(page) {
+  await page.getByRole("textbox", { name: "Endereço de Faturamento" }).fill("Rua Teste, 123");
+  await page.getByRole("textbox", { name: "Complemento" }).fill("Sala 1");
+  await page.getByRole("textbox", { name: "Número Endereço" }).fill("123");
+  await page.getByRole("textbox", { name: "Bairro", exact: true }).fill("Bairro Teste");
+  await page.getByRole("textbox", { name: "CEP", exact: true }).fill("01310-100");
+  await page.getByRole("textbox", { name: "Telefone", exact: true }).fill("(11) 3055-0100");
+  await page.getByRole("textbox", { name: "Telefone Cobrança" }).fill("(11) 3055-0100");
+  await page.getByRole("textbox", { name: "Celular" }).fill("(11) 98888-0000");
+  await page.getByRole("textbox", { name: "Inscrição Estadual" }).fill("ISENTO");
+  await page.getByRole("textbox", { name: "E-MAIL Cobrança" }).fill("leadteste@teste.com");
+  await page.getByRole("textbox", { name: "E-mail envio NF-e (XML e PDF)" }).fill("leadteste@teste.com");
+  await page.getByRole("textbox", { name: "Email", exact: true }).fill("leadteste@teste.com");
+  await page.getByRole("textbox", { name: "Parceiro de Negócios Vendedor" }).fill("H01_SD100");
+  await page.getByRole("textbox", { name: "Número AE" }).fill("AE001");
+  await page.getByRole("textbox", { name: "Nome Farmacêutico Responsável" }).fill("Farmacêutico Teste");
+  await page.getByRole("textbox", { name: "Número CRF Farmacêutico Responsável" }).fill("CRF001");
+  await page.getByRole("textbox", { name: "Data de vencimento CRF" }).fill("31/12/2030");
+  await page.getByRole("textbox", { name: "Número Alvará Sivisa" }).fill("SIVISA001");
+  await page.getByRole("textbox", { name: "Data de Vencimento Alvará Sivisa" }).fill("31/12/2030");
+  await page.getByRole("textbox", { name: "Categoria de lista de preços" }).fill("18");
+  await page.getByRole("textbox", { name: "Cidade", exact: true }).fill("São Paulo");
+  await page.getByRole("textbox", { name: "Zona de Transporte" }).fill("ZDBRSP-129");
+  await page.getByRole("textbox", { name: "Partner", exact: true }).fill("501537");
+
+  await selecionarPicklist(page, "Situação AFE/AE", "Regular");
+  await selecionarPicklist(page, "Classe do cliente", "04-Hospitalar");
+  await selecionarPicklist(page, "Pode comprar medicamento controlado", "Não");
+  await selecionarPicklist(page, "Conta do Cliente", "ZMED");
+  await selecionarPicklist(page, "Grupo do cliente", "07- Órgão público");
+  await selecionarPicklist(page, "Setor Industrial", "0001");
+  await selecionarPicklist(page, "Categoria CFOP do cliente", "0");
+  await selecionarPicklist(page, "Classificação fiscal", "1");
+  await selecionarPicklist(page, "Descrição Contribuinte ICMS", "Não contribuinte");
+  await selecionarPicklist(page, "Grupo de substituição fiscal", "001");
+  await selecionarPicklist(page, "Esquema cliente", "1");
+  await selecionarPicklist(page, "UF", "SP");
+  await selecionarPicklist(page, "Validade de lote que o cliente aceita?", "Qualquer validade");
+  await selecionarPicklist(page, "Forma de Contato Padrão", "e-mail");
+  await page.getByRole("checkbox", { name: "Aceita contato por e-mail?" }).check();
+
+  // "Tipo Entidade Governamental" (LEGAL_ENTY no payload SAP) — sem ele, a
+  // integração falha com "Indicar a chave completa para a área de vendas"
+  // junto com o Business Unit errado (ver comentário em
+  // criarLeadHospitalarComoNicoleAteAnaliseCadastral). "Consórcio Público"
+  // (value "05") é o valor confirmado no único Lead Hospitalar convertido
+  // com integração SAP bem-sucedida analisado até agora.
+  await selecionarPicklist(page, "Tipo Entidade Governamental", "Consórcio Público");
+
+  // "Segmento" (default do wizard de criação é "Farmácia/Distribuidor
+  // farmacêutico") — pedido do usuário (2026-08-20): o Lead Hospitalar
+  // precisa ser criado com "Órgão Público" ou "Distribuidor Hospitalar", não
+  // com o default. Confirmado que "Órgão Público" já destrava o processo de
+  // aprovação real (Histórico de aprovação deixa de ficar sempre em 0); o
+  // usuário pediu pra usar "Distribuidor Hospitalar" especificamente.
+  await selecionarPicklist(page, "Segmento", "Distribuidor Hospitalar");
+}
+
+function gerarCnpjValidoHospitalar() {
+  const calcularDigito = (base) => {
+    const pesos = base.length === 12 ? [5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2] : [6, 5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2];
+    const soma = base.split("").reduce((acc, digito, i) => acc + Number(digito) * pesos[i], 0);
+    const resto = soma % 11;
+    return resto < 2 ? 0 : 11 - resto;
+  };
+  const raiz = Date.now().toString().slice(-8);
+  const base12 = raiz + "0001";
+  const dv1 = calcularDigito(base12);
+  const dv2 = calcularDigito(base12 + dv1);
+  const cnpj = base12 + dv1 + dv2;
+  return `${cnpj.slice(0, 2)}.${cnpj.slice(2, 5)}.${cnpj.slice(5, 8)}/${cnpj.slice(8, 12)}-${cnpj.slice(12, 14)}`;
+}
+
+// Cria um Lead Hospitalar do zero como Nicole Gomes Amaral (fluxo
+// CNPJ-primeiro), completa a Análise Cadastral com o layout dela e avança o
+// Status até "Pronto para Aprovação" — extraído do CT 6
+// (tests/2- Lead/CT 6 - criar-lead-hospitalar.spec.js) pra ser reaproveitado
+// também por scripts de massa (ver scripts/criar-massa-hospitalar-nicole.js).
+//
+// DESCOBERTA-CHAVE (2026-08-20): com "Segmento" = "Distribuidor Hospitalar"
+// (campo antes deixado no default errado "Farmácia/Distribuidor
+// farmacêutico"), clicar "Marcar como Status atual" pra "Pronto para
+// Aprovação" dispara sozinho uma aprovação REAL (cria um Histórico de
+// aprovação de verdade, "Análise Cadastral" pendente) — o mesmo mecanismo
+// que já funcionava pra Cimed Tech/Milimetric/CG Cloud. Antes disso, sem o
+// Segmento certo, nenhuma aprovação real era criada, e por isso todo o resto
+// do fluxo (Mayssara, Fiscal, conversão) tinha que ser simulado via
+// truques de Status/path — não é mais necessário. Ver
+// [[project_lead_hospitalar_nicole]] na memória do projeto pro raciocínio
+// completo por trás de cada passo. Retorna o Id do Lead criado.
+async function criarLeadHospitalarComoNicoleAteAnaliseCadastral(page, sfSession) {
+  const { loginComoUsuario } = require("./userHelpers");
+  await loginComoUsuario(page, sfSession, "Nicole Gomes Amaral");
+
+  const cnpj = gerarCnpjValidoHospitalar();
+  const sufixo = Date.now().toString().slice(-8);
+  const sobrenome = `Sobrenome Hospitalar ${sufixo}`;
+  const razaoSocial = `Hospitalar Teste ${sufixo}`;
+
+  // Login As Nicole já abre direto no app "CIMED - Hospitalar" com a lista
+  // de Leads ativa — não precisa navegar até "Leads" primeiro.
+  await page.getByRole("button", { name: "Criar" }).click();
+  await page.waitForTimeout(1500);
+  await page.getByText("Hospitalar", { exact: true }).click({ force: true });
+  await page.getByRole("button", { name: "Avançar" }).click();
+  await page.waitForTimeout(1500);
+
+  const cnpjInput = page.getByRole("textbox", { name: "CNPJ" });
+  await cnpjInput.fill(cnpj);
+  await cnpjInput.press("Tab");
+  await page.waitForTimeout(3000);
+  await page.getByRole("button", { name: "Avançar" }).click();
+  await page.waitForTimeout(3000);
+
+  await page.getByRole("textbox", { name: "Sobrenome" }).fill(sobrenome);
+  await page.getByRole("textbox", { name: "Razão Social" }).fill(razaoSocial);
+
+  // Diferente dos outros tipos (Cimed Tech/Milimetric/CG Cloud, onde "01 -
+  // Contas Nacionais" não tem preço cadastrado e "03 - Varejo Independente"
+  // é o substituto certo), pra Hospitalar o Business Unit certo é **"04 -
+  // Hospitalar"** — descoberto comparando o JSON_Enviado__c de uma Conta
+  // convertida com sucesso no SAP (VKORG/VWERK = "1014") contra uma que
+  // falhou com "03 - Varejo Independente" (VKORG/VWERK vinham nulos, SAP
+  // rejeitava com "Indicar a chave completa para a área de vendas" — a
+  // configuração de Centro/Organização de Vendas do "03" não cobre
+  // Hospitalar). Ver [[project_lead_hospitalar_nicole]].
+  const buInput = page.getByRole("combobox", { name: "Business Unit" });
+  await buInput.click();
+  await buInput.pressSequentially("04", { delay: 150 });
+  await page.waitForTimeout(2000);
+  await page.getByText("04 - Hospitalar").click();
+  await page.waitForTimeout(1000);
+
+  await page.getByRole("button", { name: "Salvar", exact: true }).click();
+  await page.waitForURL(/\/lightning\/r\/(Lead\/)?00Q\w+\/view/, { timeout: 30000 });
+  const leadId = page.url().match(/00Q\w+/)[0];
+
+  await page.getByRole("button", { name: "Editar", exact: true }).click();
+  await page.waitForTimeout(2000);
+  await completarAnaliseCadastralHospitalarComoNicole(page);
+  await page.getByRole("button", { name: "Salvar", exact: true }).click();
+  await page.waitForTimeout(3000);
+
+  // Pedido do usuário (2026-08-20) era atribuir esses checkboxes à Nicole —
+  // testado e IMPOSSÍVEL: o profile dela ("Faturamento") não tem permissão
+  // de escrita nesses campos nem via API (erro real:
+  // "INVALID_FIELD_FOR_INSERT_UPDATE ... verify that it is read/write for
+  // your profile or permission set"), consistente com o campo nem aparecer
+  // no layout dela. Mantido com a sessão do usuário de automação.
+  await preencherAnexosDocumento(sfSession, leadId);
+
+  await page.goto(`https://${sfSession.instanceHost}/lightning/r/Lead/${leadId}/view`);
+  await page.waitForTimeout(3000);
+  await page.getByRole("option", { name: /Pronto para Apro/ }).click();
+  await page.waitForTimeout(1000);
+  await page.getByRole("button", { name: "Marcar como Status atual" }).click();
+  await page.waitForTimeout(3000);
+
+  // Com o Segmento certo, esse clique já dispara a aprovação real — o Status
+  // (customizado) já reflete "Análise Cadastral" na sequência, com um
+  // Histórico de aprovação de verdade pendente pra Mayssara (ver
+  // `aprovarEtapaPendente`). Não precisa de mais nenhum clique de path aqui.
+
+  return leadId;
+}
+
 // Abre um Lead com Status "Análise Fiscal" do Tipo de registro pedido. A
 // lista de Leads da UI só mostra "Recentes" (nem toda a massa do sistema) e
 // o layout de detalhes não expõe "Tipo de registro" como campo — por isso
@@ -109,10 +353,16 @@ async function abrirLeadEmAnaliseFiscalPorTipo(page, sfSession, tipoRegistro) {
   // exigidos por regras de validação que mudaram desde então) parados nesse
   // Status. Sem isso, o SOQL pode devolver um registro arbitrário e
   // desatualizado em vez da massa fresca que acabou de ser gerada.
+  //
+  // IsConverted = false é essencial pro Hospitalar: descobrimos que o campo
+  // Status (customizado) pode continuar em "Análise Fiscal" mesmo DEPOIS do
+  // Lead já ter convertido de verdade (visto tanto em Leads reais de
+  // produção quanto em massa de teste nossa) — sem esse filtro, essa query
+  // pode pegar um Lead já convertido e quebrar tudo que vem depois.
   const resultado = await soqlQuery({
     instanceHost: sfSession.instanceHost,
     sessionId: sfSession.sessionId,
-    query: `SELECT Id FROM Lead WHERE Status = 'Análise Fiscal' AND RecordType.Name = '${tipoRegistro}' ORDER BY CreatedDate DESC LIMIT 1`,
+    query: `SELECT Id FROM Lead WHERE Status = 'Análise Fiscal' AND RecordType.Name = '${tipoRegistro}' AND IsConverted = false ORDER BY CreatedDate DESC LIMIT 1`,
   });
 
   if (resultado.totalSize === 0) {
@@ -132,7 +382,11 @@ async function abrirLeadEmAnaliseFiscalPorTipo(page, sfSession, tipoRegistro) {
 // "Análise Financeira" na hora, outros não) — quem chama confere o efeito
 // que precisa.
 async function aprovarEtapaPendente(page) {
-  await page.getByRole("link", { name: /Histórico de aprovação/ }).click();
+  // .first(): em alguns layouts (Hospitalar) existem 2 links cujo nome bate
+  // com essa regex — o título do card em si e o "Exibir tudo" dele — sem
+  // isso, o Playwright falha com "strict mode violation". O primeiro é
+  // sempre o título do card, que é o que queremos clicar.
+  await page.getByRole("link", { name: /Histórico de aprovação/ }).first().click();
   await page.waitForTimeout(3000);
   await page.getByRole("button", { name: "Aprovar", exact: true }).click();
   await page.waitForTimeout(2000);
@@ -376,6 +630,34 @@ async function aprovarAnaliseFiscalComEdicao(page) {
   }
 }
 
+// Converte o Lead de verdade usando o botão nativo "Converter" (a tela
+// padrão de conversão do Salesforce — Conta/Contato/Oportunidade — não o
+// mecanismo de "Editar Lead Aprovação"). Esse botão só existe pra alguns
+// Tipos de Registro (Hospitalar e CG Cloud têm; Cimed Tech/Milimetric não).
+//
+// DESCOBERTA DO USUÁRIO (2026-08-20): pra Hospitalar, diferente de Cimed
+// Tech/Milimetric/CG Cloud, "Editar Lead Aprovação" + "Salvar e Aprovar" NÃO
+// converte de verdade (mostra "Sucesso!" mas `IsConverted` continua false —
+// não existe nenhum Histórico de aprovação real por trás, ver
+// [[project_lead_hospitalar_nicole]]). O passo que realmente falta é esse
+// botão "Converter" nativo — testado manualmente pelo usuário e confirmado
+// via SOQL (`IsConverted = true`, Account/Contact reais criados) — depois
+// replicado aqui via automação com o mesmo resultado.
+//
+// O modal já vem com "Criar nova Conta"/"Criar novo Contato"/"Criar nova
+// Oportunidade" pré-selecionados e pré-preenchidos com nomes derivados do
+// Lead — não precisa mexer em nada, só confirmar. Pré-condição: Fiscal/
+// Financeira/Logística já preenchidos (`completarFiscalLogisticaEConverter`)
+// e Cadeira (Org Unit) já setada, senão a validação de conversão barra antes
+// do modal aparecer, com os mesmos erros já documentados
+// ("O campo bairro está vazio." etc.).
+async function converterLeadNativo(page) {
+  await page.getByRole("button", { name: "Converter", exact: true }).click();
+  await page.waitForTimeout(3000);
+  await page.getByRole("dialog").getByRole("button", { name: "Converter", exact: true }).click();
+  await page.waitForTimeout(5000);
+}
+
 // Aprova a etapa "Análise Cadastral" pendente de um Lead usando o recurso
 // nativo do Salesforce "Login" (logar como outro usuário, sem precisar da
 // senha dele — disponível pra administradores em orgs sandbox). Necessário
@@ -401,14 +683,71 @@ async function aprovarComoMayssara(page, sfSession, leadId) {
   await page.waitForTimeout(3000);
 }
 
+// Avança o Lead Hospitalar de "Análise Cadastral" pra "Análise Fiscal" como
+// Mayssara Aparecida de Sousa, aprovando a etapa pendente de verdade via
+// "Histórico de aprovação" (mesmo mecanismo de `aprovarEtapaPendente`, usado
+// por Cimed Tech).
+//
+// CORRIGIDO 2026-08-20: antes achávamos que não existia aprovação real pra
+// Hospitalar (Histórico de aprovação sempre em 0) — na real, faltava o
+// "Segmento" certo no Lead ("Distribuidor Hospitalar", ver
+// `completarAnaliseCadastralHospitalarComoNicole`). Com o Segmento certo, a
+// submissão é automática (só chegar em "Pronto para Aprovação" já cria o
+// Histórico de aprovação pendente) e a aprovação de Mayssara é o botão
+// "Aprovar" de verdade — não precisa mais de nenhum truque de path/Status.
+//
+// A `page` precisa estar autenticada como outro usuário (Nicole, que criou o
+// Lead) antes de chamar isso — por isso desloga primeiro e reautentica via
+// frontdoor com a sessão do usuário de automação, senão `loginComoUsuario`
+// não encontra a página de detalhes do usuário (a org desloga da sessão
+// inteira, não só da personificação, ao clicar "Fazer logout como X").
+async function avancarAnaliseFiscalHospitalarComoMayssara(page, sfSession, leadId) {
+  const { loginComoUsuario } = require("./userHelpers");
+
+  const logoutLink = page.getByRole("link", { name: /Fazer logout como/ });
+  if (await logoutLink.count()) {
+    await logoutLink.click();
+    await page.waitForTimeout(4000);
+    await page.goto(`https://${sfSession.instanceHost}/secur/frontdoor.jsp?sid=${sfSession.sessionId}`);
+    await page.goto(`https://${sfSession.instanceHost}/lightning/page/home`);
+    await page.waitForURL(/\/lightning\//, { timeout: 60000 });
+    await page.waitForTimeout(2000);
+  }
+
+  // Essa transição específica (deslogar da Nicole na MESMA página e logar
+  // como Mayssara em seguida) mostrou ser mais instável que um "Login As"
+  // direto numa sessão nova (confirmado testando as duas formas) — trata com
+  // uma segunda tentativa antes de desistir, reautenticando via frontdoor de
+  // novo entre as tentativas.
+  try {
+    await loginComoUsuario(page, sfSession, "Mayssara Aparecida de Sousa");
+  } catch (erro) {
+    await page.goto(`https://${sfSession.instanceHost}/secur/frontdoor.jsp?sid=${sfSession.sessionId}`);
+    await page.goto(`https://${sfSession.instanceHost}/lightning/page/home`);
+    await page.waitForURL(/\/lightning\//, { timeout: 60000 });
+    await page.waitForTimeout(2000);
+    await loginComoUsuario(page, sfSession, "Mayssara Aparecida de Sousa");
+  }
+
+  await page.goto(`https://${sfSession.instanceHost}/lightning/r/Lead/${leadId}/view`);
+  await page.waitForTimeout(3000);
+  await aprovarEtapaPendente(page);
+}
+
 module.exports = {
   selecionarViaPesquisaAvancada,
   selecionarPicklist,
+  completarAnaliseCadastralComum,
+  avancarAnaliseFiscalHospitalarComoMayssara,
+  completarAnaliseCadastralHospitalarComoNicole,
+  criarLeadHospitalarComoNicoleAteAnaliseCadastral,
   abrirLeadEmAnaliseFiscalPorTipo,
   aprovarEtapaPendente,
   completarFiscalLogisticaEConverter,
   marcarStatusConvertido,
   aprovarAnaliseFiscalComEdicao,
+  converterLeadNativo,
   aprovarComoMayssara,
   preencherCadeiraOrgUnit,
+  preencherAnexosDocumento,
 };

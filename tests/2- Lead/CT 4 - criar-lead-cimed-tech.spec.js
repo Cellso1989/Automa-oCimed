@@ -1,5 +1,5 @@
 const { test, expect } = require("../../support/fixtures");
-const { selecionarViaPesquisaAvancada, selecionarPicklist } = require("../../support/leadHelpers");
+const { completarAnaliseCadastralComum } = require("../../support/leadHelpers");
 
 // Só cria o Lead Cimed Tech e completa a Análise Cadastral com dados
 // válidos (mesmos valores reais usados no CT 8/scripts de massa) — sem
@@ -23,29 +23,7 @@ test("cria um Lead Cimed Tech com Análise Cadastral completa e válida", async 
   await page.getByRole("button", { name: "Editar", exact: true }).click();
   await page.waitForTimeout(2000);
 
-  await page.getByRole("textbox", { name: "Endereço de Faturamento" }).fill("Rua Teste, 123");
-  await page.getByRole("textbox", { name: "CEP", exact: true }).fill("01310-100");
-  await page.getByRole("textbox", { name: "Bairro", exact: true }).fill("Bairro Teste");
-  await page.getByRole("textbox", { name: "Cidade", exact: true }).fill("São Paulo");
-  await page.getByRole("textbox", { name: "Parceiro de Negócios Vendedor" }).fill("H07_IS306");
-  await page.getByRole("textbox", { name: "Número AE" }).fill("AE001");
-  await page.getByRole("textbox", { name: "Nome Farmacêutico Responsável" }).fill("Farmacêutico Teste");
-  await page.getByRole("textbox", { name: "Número CRF Farmacêutico Responsável" }).fill("CRF001");
-  await page.getByRole("textbox", { name: "Data de vencimento CRF" }).fill("31/12/2030");
-  await page.getByRole("textbox", { name: "Documentos Faltantes" }).fill("Nenhum");
-  await page.getByRole("textbox", { name: "Número Alvará Sivisa" }).fill("SIVISA001");
-  await page.getByRole("textbox", { name: "Data de Vencimento Alvará Sivisa" }).fill("31/12/2030");
-
-  await selecionarPicklist(page, "Situação AFE/AE", "Regular");
-  await selecionarPicklist(page, "Classe do cliente", "01- Grandes Redes");
-  await selecionarPicklist(page, "Grupo do cliente", "01-Grandes contas");
-  await selecionarPicklist(page, "Pode comprar medicamento controlado", "Não");
-  await selecionarPicklist(page, "Conta do Cliente", "ZMED");
-
-  // Business Unit "01 - Contas Nacionais" não tem preço cadastrado (achado
-  // manual confirmado) — usar "03 - Varejo Independente" em vez disso.
-  await selecionarViaPesquisaAvancada(page, "Business Unit", "03");
-  await selecionarViaPesquisaAvancada(page, "Warehouse", "SP");
+  await completarAnaliseCadastralComum(page, { parceiro: "H07_IS306" });
 
   await page.getByRole("button", { name: "Salvar", exact: true }).click();
   await page.waitForTimeout(3000);

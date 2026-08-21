@@ -6,14 +6,23 @@
 // pré-condição em vez de confiar em massa deixada por terceiros.
 const { soqlQuery } = require("./soqlQuery");
 
-// Hospitalar fica de fora de propósito: já investigado que gerar massa não
-// resolve (bloqueio de layout no Setup do Salesforce, não de dado faltando)
-// — ver README.md / [[project_lead_conversao_real]].
+// Hospitalar precisa ser criado pela usuária Nicole Gomes Amaral (Profile
+// "Faturamento" — a única com layout que expõe "Forma de Contato Padrão")
+// e avançado por Mayssara Aparecida de Sousa — ver
+// scripts/criar-massa-hospitalar-nicole.js e [[project_lead_hospitalar_nicole]]
+// na memória do projeto. A suposição antiga de que gerar massa não resolve
+// (bloqueio de layout, ver README.md / [[project_lead_conversao_real]])
+// estava incompleta: era bloqueio de PROFILE, não de Setup.
 async function garantirMassaEmAnaliseFiscal(sfSession, tipoRegistro) {
+  // IsConverted = false é essencial pro Hospitalar — o Status (customizado)
+  // pode continuar em "Análise Fiscal" mesmo depois do Lead já ter
+  // convertido de verdade (ver [[project_lead_hospitalar_nicole]]). Sem esse
+  // filtro, essa checagem pode achar um Lead já convertido e concluir
+  // (errado) que já existe massa disponível.
   const resultado = await soqlQuery({
     instanceHost: sfSession.instanceHost,
     sessionId: sfSession.sessionId,
-    query: `SELECT Id FROM Lead WHERE Status = 'Análise Fiscal' AND RecordType.Name = '${tipoRegistro}' LIMIT 1`,
+    query: `SELECT Id FROM Lead WHERE Status = 'Análise Fiscal' AND RecordType.Name = '${tipoRegistro}' AND IsConverted = false LIMIT 1`,
   });
   if (resultado.totalSize > 0) return; // já tem massa disponível — nada a fazer
 
@@ -26,6 +35,10 @@ async function garantirMassaEmAnaliseFiscal(sfSession, tipoRegistro) {
 
   if (tipoRegistro === "CG Cloud") {
     const { criarEAprovarCadastral } = require("../scripts/criar-massa-cg-cloud");
+    const { browser } = await criarEAprovarCadastral({ headless });
+    await browser.close();
+  } else if (tipoRegistro === "Hospitalar") {
+    const { criarEAprovarCadastral } = require("../scripts/criar-massa-hospitalar-nicole");
     const { browser } = await criarEAprovarCadastral({ headless });
     await browser.close();
   } else {

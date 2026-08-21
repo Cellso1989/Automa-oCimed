@@ -60,4 +60,22 @@ async function loginComoUsuario(page, sfSession, emailOuNome) {
   return usuario;
 }
 
-module.exports = { loginComoUsuario };
+// Extrai o session Id (cookie "sid") do usuário atualmente impersonado na
+// `page` (via "Login As"), escopado pro domínio de `instanceHost` — cada
+// domínio (my.salesforce.com, lightning.force.com, salesforce-setup.com...)
+// tem seu PRÓPRIO cookie "sid" com valor diferente; usar o cookie errado (ex.
+// o do domínio lightning.force.com) autentica na API REST como o usuário
+// ERRADO. Serve pra fazer chamadas de API (ex.: PATCH em campos sem campo de
+// UI) que precisam ficar atribuídas a esse usuário (`LastModifiedById`), não
+// ao usuário de automação — confirmado testando contra
+// /services/data/v60.0/chatter/users/me.
+async function obterSessionIdDoUsuarioImpersonado(page, instanceHost) {
+  const cookies = await page.context().cookies();
+  const cookieSid = cookies.find((c) => c.name === "sid" && c.domain === instanceHost);
+  if (!cookieSid) {
+    throw new Error(`Cookie "sid" pro domínio "${instanceHost}" não encontrado — a página está mesmo impersonando alguém via Login As?`);
+  }
+  return cookieSid.value;
+}
+
+module.exports = { loginComoUsuario, obterSessionIdDoUsuarioImpersonado };

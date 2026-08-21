@@ -19,6 +19,10 @@ const TEMAS = [
 module.exports = defineConfig({
   timeout: 60000,
   reporter: "list",
+  // Só age em CI (ver support/globalSetup.js) — prepara de uma vez a massa
+  // de Lead que CT 9/10/11 precisam, em vez de cada spec gerar a sua sob
+  // demanda no meio da suíte inteira.
+  globalSetup: require.resolve("./support/globalSetup.js"),
   // Sequencial — rodar em paralelo sobrecarrega a org (que já é lenta) e
   // deixa a UI instável o suficiente pra derrubar seletores por timing.
   workers: 1,

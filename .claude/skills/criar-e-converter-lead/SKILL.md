@@ -1,6 +1,6 @@
 ---
 name: criar-e-converter-lead
-description: Cria um Lead do zero (Cimed Tech, Milimetric ou CG Cloud), preenche a Análise Cadastral, aprova como Mayssara, completa Fiscal/Financeira/Logística e aprova via "Editar Lead Aprovação" + "Salvar e Aprovar" — o mecanismo real de conversão nativa do Salesforce. Confirma no final se IsConverted=true, se a Account foi criada, e se a integração com o SAP funcionou. Uso local, sob demanda — nunca commita nem dá push. Invocar com "/criar-e-converter-lead <Tipo>" quando quiser gerar um Lead convertido de ponta a ponta pra testar/validar algo manualmente, sem repetir os ~10 passos manuais.
+description: Cria um Lead do zero (Cimed Tech, Milimetric, CG Cloud ou Hospitalar), preenche a Análise Cadastral, aprova como Mayssara, completa Fiscal/Financeira/Logística e aprova via "Editar Lead Aprovação" + "Salvar e Aprovar" — o mecanismo real de conversão nativa do Salesforce. Confirma no final se IsConverted=true, se a Account foi criada, e se a integração com o SAP funcionou. Uso local, sob demanda — nunca commita nem dá push. Invocar com "/criar-e-converter-lead <Tipo>" quando quiser gerar um Lead convertido de ponta a ponta pra testar/validar algo manualmente, sem repetir os ~10 passos manuais.
 ---
 
 # Criar e converter Lead (ponta a ponta)
@@ -15,19 +15,23 @@ e o status da integração com o SAP.
 ## Como invocar
 
 ```
-node scripts/criar-e-converter-lead.js "<Cimed Tech|Milimetric|CG Cloud>"
+node scripts/criar-e-converter-lead.js "<Cimed Tech|Milimetric|CG Cloud|Hospitalar>"
 ```
 
-Tipos suportados: **Cimed Tech**, **Milimetric**, **CG Cloud** — os três
-confirmados de ponta a ponta (ver `README.md`, seção "Conversão real do
-Lead"). **Hospitalar não é suportado** — não existe processo de aprovação
-ativo pra esse tipo no Setup, então nem o "Enviar para aprovação" funciona;
-o script já recusa de cara com uma mensagem clara em vez de travar no meio.
+Tipos suportados: **Cimed Tech**, **Milimetric**, **CG Cloud** e
+**Hospitalar** — os quatro confirmados de ponta a ponta (ver `README.md`,
+seções "Conversão real do Lead" e "Hospitalar"). Hospitalar precisa ser
+criado como Nicole Gomes Amaral (Login As) com "Segmento" = "Distribuidor
+Hospitalar" pra aprovação real disparar — o script já cuida disso sozinho
+(`scripts/criar-massa-hospitalar-nicole.js`), sem precisar de nada especial
+na invocação.
 
 ## O que o script faz
 
-1. Cria o Lead (`scripts/criar-massa-cg-cloud.js` ou `scripts/criar-massa-lead.js`,
-   dependendo do tipo) com todos os campos reais da Análise Cadastral.
+1. Cria o Lead com todos os campos reais da Análise Cadastral — via
+   `scripts/criar-massa-cg-cloud.js`, `scripts/criar-massa-hospitalar-nicole.js`
+   ou `scripts/criar-massa-lead.js`, dependendo do tipo (Hospitalar usa um
+   fluxo próprio: Nicole cria via "Login As", Mayssara avança a Cadastral).
 2. Aprova a Análise Cadastral como a Mayssara Aparecida de Sousa via "Login
    As" nativo (uso autorizado explicitamente pelo usuário).
 3. Preenche Fiscal/Financeira/Logística com valores reais por tipo
@@ -50,10 +54,20 @@ vermelho tipo "Campo obrigatório exigido" ou um erro de validação de
 conversão). Reporte esse texto ao usuário — cada campo faltando aparece um
 de cada vez, não todos juntos.
 
+## Notas específicas do Hospitalar
+
+- O fluxo de criação pode falhar por flakiness na troca de sessão (Login As
+  Nicole → Mayssara) — a org é lenta nesse ponto específico; um retry
+  automático já existe em `avancarAnaliseFiscalHospitalarComoMayssara`, mas
+  se falhar mesmo assim, rode de novo.
+- Se o Lead não avançar de "Rascunho" (Status continua o mesmo depois de
+  "Marcar como Status atual"), confira se o "Segmento" está mesmo
+  "Distribuidor Hospitalar" — esse é o campo-chave que destrava a aprovação
+  real pra esse tipo (ver [[project_lead_hospitalar_nicole]] na memória do
+  projeto).
+
 ## O que NÃO fazer
 
 - Não rodar em loop/lote sem confirmação do usuário sobre quantos Leads
   criar — cada execução cria dado real na org (mesmo sendo sandbox UAT).
-- Não usar pra Hospitalar mesmo que pareça "quase funcionar" — é um
-  bloqueio de configuração do Setup, não vai resolver rodando de novo.
 - Não commitar nada gerado por essa skill.
