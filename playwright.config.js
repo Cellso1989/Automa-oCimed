@@ -30,9 +30,24 @@ module.exports = defineConfig({
     viewport: { width: 1280, height: 800 },
     screenshot: "on",
   },
-  projects: TEMAS.map((tema) => ({
-    name: tema,
-    testDir: `./tests/${tema}`,
-    outputDir: `./tests/${tema}/screenshots`,
-  })),
+  projects: [
+    ...TEMAS.map((tema) => ({
+      name: tema,
+      testDir: `./tests/${tema}`,
+      outputDir: `./tests/${tema}/screenshots`,
+    })),
+    // Suíte de testes negativos (campos obrigatórios, dados inválidos, regras
+    // de negócio bloqueadas etc.) — separada dos temas positivos acima e
+    // deliberadamente fora da execução padrão do CI (ver .github/workflows/
+    // playwright.yml, que lista os projects positivos explicitamente) porque
+    // cada cenário negativo cria registros reais extras no Salesforce UAT.
+    // Rodar com: npx playwright test --project=negative
+    // ou:        npx playwright test tests/negative
+    // ou:        npx playwright test "tests/negative/2- Lead"
+    {
+      name: "negative",
+      testDir: "./tests/negative",
+      outputDir: "./tests/negative/screenshots",
+    },
+  ],
 });

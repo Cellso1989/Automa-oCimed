@@ -59,7 +59,14 @@ jobs:
         # travamento na grade virtualizada que motivou excluí-lo não
         # reproduziu mais em retestes (ver comentário no próprio spec) —
         # deve rodar normalmente quando a suíte inteira é executada.
-        run: npx playwright test
+        #
+        # Lista os projects positivos explicitamente (em vez de "npx
+        # playwright test" sem filtro) pra não incluir o project "negative"
+        # (playwright.config.js) automaticamente aqui — cada cenário negativo
+        # cria registros reais extras no Salesforce UAT, então rodar essa
+        # suíte fica manual/local por decisão do usuário (2026-08-21):
+        # npx playwright test --project=negative
+        run: npx playwright test --project="1- Login" --project="2- Lead" --project="3- Oportunidade" --project="4- Pedido" --project="5- Conta" --project="6- Contato"
 
       - name: Salvar screenshots de falha
         if: always()
